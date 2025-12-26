@@ -1,7 +1,7 @@
 import React from "react";
 
 export function Pagination({ totalPages, currentPage, handlePageChange }) {
-    if (totalPages <= 1) return null; // لا يظهر إذا صفحة واحدة فقط
+    if (totalPages <= 1) return null; 
 
    return (
     <div className="flex justify-center items-center mt-4 gap-2">
@@ -47,3 +47,4 @@ export function Pagination({ totalPages, currentPage, handlePageChange }) {
 );
 
 }
+
