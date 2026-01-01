@@ -1,0 +1,288 @@
+- ajouter nom et prenom sur -> BD
+
+[CREATE DEFINER=`root`@`localhost` PROCEDURE `DeleteRetraitBySupplierAndOperation` (IN `p_SupplierID` INT, IN `p_OperationID` INT, OUT `p_ResultCode` INT)   BEGIN
+    DECLARE existingCount INT DEFAULT 0;
+
+    SELECT COUNT(*) 
+    INTO existingCount
+    FROM retrait_cahier_charges
+    WHERE SupplierID = p_SupplierID
+      AND OperationID = p_OperationID
+      AND Status = 1;
+
+    IF existingCount = 0 THEN
+        SET p_ResultCode = 1002; 
+    ELSE
+        
+        UPDATE retrait_cahier_charges
+        SET Status = 0
+        WHERE SupplierID = p_SupplierID
+          AND OperationID = p_OperationID
+          AND Status = 1;
+
+        SET p_ResultCode = 0; 
+    END IF;
+END$$]
+
+[CREATE DEFINER=`root`@`localhost` PROCEDURE `getAllSuppliers` (IN `p_adminID` VARCHAR(50))   BEGIN
+    SELECT 
+        s.Id,
+        s.NomPrenom,
+        s.NomSociete,
+        s.NatureJuridique,
+        s.Adresse,
+        s.Telephone,
+        s.Rc,
+        s.Nif,
+        s.Rib,
+        s.Email,
+        s.Ai,
+        s.AgenceBancaire,
+        s.Status,
+        s.adminId
+    FROM suppliers s
+    WHERE s.Status = 1
+      AND s.adminId = p_adminID;
+END$$
+]
+
+[CREATE DEFINER=`root`@`localhost` PROCEDURE `getSuppliersWithOperations` (IN `p_adminID` INT)   BEGIN
+    SELECT 
+        s.Id,
+        s.NomPrenom,
+        s.NomSociete,
+        s.NatureJuridique,
+        s.Adresse,
+        s.Telephone,
+        s.Rc,
+        s.Nif,
+        s.Rib,
+        s.Email,
+        s.Ai,
+        s.AgenceBancaire,
+        s.Status,
+        r.Status,
+        s.adminId,
+        o.Numero AS NumeroOperation
+    FROM suppliers s
+    INNER JOIN retrait_cahier_charges r 
+        ON r.SupplierID = s.Id
+    INNER JOIN operations o
+        ON o.Id = r.OperationID
+    WHERE s.Status = 1
+      AND r.Status = 1
+      AND s.adminId = p_adminID
+    ORDER BY o.Numero ASC;
+END$$]
+
+[CREATE DEFINER=`root`@`localhost` PROCEDURE `insertRetrait` (IN `p_SupplierID` CHAR(36), IN `p_OperationID` CHAR(36), IN `p_NumeroRetrait` VARCHAR(50), IN `p_AdminID` CHAR(36), OUT `p_ResultCode` INT)   BEGIN
+    DECLARE existingCount INT;
+
+    -- Vérifier la duplication du NumeroRetrait pour la même opération
+    SELECT COUNT(*) INTO existingCount
+    FROM retrait_cahier_charges
+    WHERE OperationID = p_OperationID
+      AND NumeroRetrait = p_NumeroRetrait;
+
+    IF existingCount > 0 THEN
+        SET p_ResultCode = 1001; -- Duplication
+    ELSE
+        -- Insérer le retrait avec Status = 1 par défaut
+        INSERT INTO retrait_cahier_charges
+        (id, SupplierID, OperationID, DateRetrait, NumeroRetrait, Status, adminId)
+        VALUES (UUID(), p_SupplierID, p_OperationID, CURDATE(), p_NumeroRetrait, 1, p_AdminID);
+
+        SET p_ResultCode = 0; -- Succès
+    END IF;
+END$$]
+
+//rigle nomPrenom
+[CREATE DEFINER=`root`@`localhost` PROCEDURE `insertSupplier` (IN `aNomPrenom` VARCHAR(100), IN `aNomSociete` VARCHAR(50), IN `aNatureJuridique` VARCHAR(50), IN `aAdresse` VARCHAR(50), IN `aTelephone` VARCHAR(50), IN `aRc` VARCHAR(50), IN `aNif` VARCHAR(50), IN `aRib` VARCHAR(50), IN `aEmail` VARCHAR(50), IN `aAi` VARCHAR(50), IN `aAgenceBancaire` VARCHAR(50), IN `adminID` CHAR(36), OUT `p_ResultCode` INT)   main_block: BEGIN
+    DECLARE aId CHAR(36);
+
+    DECLARE rc_count INT DEFAULT 0;
+    DECLARE nif_count INT DEFAULT 0;
+    DECLARE tel_count INT DEFAULT 0;
+    DECLARE ai_count INT DEFAULT 0;
+    DECLARE rib_count INT DEFAULT 0;
+    DECLARE email_count INT DEFAULT 0;
+
+    -- Error handler
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET p_ResultCode = 5000;
+        ROLLBACK;
+    END;
+
+    START TRANSACTION;
+
+    SET aId = UUID();
+
+    -- Check RC
+    SELECT COUNT(*) INTO rc_count
+    FROM suppliers
+    WHERE Rc = aRc AND Rc IS NOT NULL AND Rc <> '';
+
+    -- Check NIF
+    SELECT COUNT(*) INTO nif_count
+    FROM suppliers
+    WHERE Nif = aNif AND Nif IS NOT NULL AND Nif <> '';
+
+    -- Check Telephone
+    SELECT COUNT(*) INTO tel_count
+    FROM suppliers
+    WHERE Telephone = aTelephone AND Telephone IS NOT NULL AND Telephone <> '';
+
+    -- Check AI
+    SELECT COUNT(*) INTO ai_count
+    FROM suppliers
+    WHERE Ai = aAi AND Ai IS NOT NULL AND Ai <> '';
+
+    -- Check RIB
+    SELECT COUNT(*) INTO rib_count
+    FROM suppliers
+    WHERE Rib = aRib AND Rib IS NOT NULL AND Rib <> '';
+
+    -- Check Email
+    SELECT COUNT(*) INTO email_count
+    FROM suppliers
+    WHERE Email = aEmail AND Email IS NOT NULL AND Email <> '';
+
+    IF rc_count > 0 THEN
+        SET p_ResultCode = 1002;
+        ROLLBACK;
+        LEAVE main_block;
+    END IF;
+
+    IF nif_count > 0 THEN
+        SET p_ResultCode = 1003;
+        ROLLBACK;
+        LEAVE main_block;
+    END IF;
+
+    IF tel_count > 0 THEN
+        SET p_ResultCode = 1004;
+        ROLLBACK;
+        LEAVE main_block;
+    END IF;
+
+    IF ai_count > 0 THEN
+        SET p_ResultCode = 1005;
+        ROLLBACK;
+        LEAVE main_block;
+    END IF;
+
+    IF rib_count > 0 THEN
+        SET p_ResultCode = 1006;
+        ROLLBACK;
+        LEAVE main_block;
+    END IF;
+
+    IF email_count > 0 THEN
+        SET p_ResultCode = 1007;
+        ROLLBACK;
+        LEAVE main_block;
+    END IF;
+
+    INSERT INTO suppliers (
+        Id,
+        NomPrenom,
+        NomSociete,
+        NatureJuridique,
+        Adresse,
+        Telephone,
+        Rc,
+        Nif,
+        Rib,
+        Email,
+        Ai,
+        AgenceBancaire,
+        Status,
+        adminId
+    ) VALUES (
+        aId,
+        aNomPrenom,
+        aNomSociete,
+        aNatureJuridique,
+        aAdresse,
+        aTelephone,
+        aRc,
+        aNif,
+        aRib,
+        aEmail,
+        aAi,
+        aAgenceBancaire,
+        1,
+        adminID
+    );
+
+    COMMIT;
+    SET p_ResultCode = 0;
+END$$]
+
+// zid rigle nomPrenom fi update zada 
+
+[
+    CREATE DEFINER=`root`@`localhost` PROCEDURE `updateSupplier` (IN `aId` CHAR(36), IN `aNomPrenom` VARCHAR(50), IN `aNomSociete` VARCHAR(50), IN `aAdresse` VARCHAR(50), IN `aTelephone` VARCHAR(50), IN `aEmail` VARCHAR(50), IN `aAgenceBancaire` VARCHAR(50), OUT `p_ResultCode` INT)   main_block: BEGIN
+    DECLARE tel_count INT DEFAULT 0;
+    DECLARE email_count INT DEFAULT 0;
+
+    -- Gestion des erreurs
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        SET p_ResultCode = 5000; -- Erreur générale
+        ROLLBACK;
+    END;
+
+    START TRANSACTION;
+
+    -- Vérifier que le téléphone n'est pas déjà utilisé par un autre fournisseur
+    SELECT COUNT(*) INTO tel_count
+    FROM suppliers
+    WHERE Telephone = aTelephone AND Id <> aId AND Telephone IS NOT NULL AND Telephone <> '';
+
+    IF tel_count > 0 THEN
+        SET p_ResultCode = 1004; -- Téléphone déjà utilisé
+        ROLLBACK;
+        LEAVE main_block;
+    END IF;
+
+    -- Vérifier que l'email n'est pas déjà utilisé par un autre fournisseur
+    SELECT COUNT(*) INTO email_count
+    FROM suppliers
+    WHERE Email = aEmail AND Id <> aId AND Email IS NOT NULL AND Email <> '';
+
+    IF email_count > 0 THEN
+        SET p_ResultCode = 1007; -- Email déjà utilisé
+        ROLLBACK;
+        LEAVE main_block;
+    END IF;
+
+    -- Mettre à jour le fournisseur
+    UPDATE suppliers
+    SET
+        NomPrenom = aNomPrenom,
+        NomSociete = aNomSociete,
+        Adresse = aAdresse,
+        Telephone = aTelephone,
+        Email = aEmail,
+        AgenceBancaire = aAgenceBancaire
+    WHERE Id = aId;
+
+    COMMIT;
+    SET p_ResultCode = 0; -- Succès
+END$$
+
+DELIMITER ;
+]
+
+//table retrait_cahier_charges
+[CREATE TABLE `retrait_cahier_charges` (
+  `id` char(36) NOT NULL DEFAULT uuid(),
+  `SupplierID` char(36) NOT NULL,
+  `OperationID` char(36) NOT NULL,
+  `DateRetrait` date NOT NULL,
+  `NumeroRetrait` varchar(50) NOT NULL,
+  `Status` tinyint(4) NOT NULL,
+  `adminId` char(36) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;]
