@@ -1,0 +1,281 @@
+import React, { useEffect, useState, useRef } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Hash, Megaphone, Plus } from "lucide-react";
+import DetailRow from '../../components/Shared/Cards/DetailRowCard';
+import { DetailsCard } from '../../components/Shared/Cards/DetailsCard';
+
+import { fetchOperationDetails } from '../../components/Operations/FetchOperationDetails';
+
+import { LotsSubSection } from '../../components/Lots/LotsSubSection';
+import {SpecificationsSection} from '../../components/Retriat Cahier de charge/SpecificationsSection';
+import { AnnouncementSubSection } from '../../components/Annonces/AnnouncementSubSection';
+
+import { Sidebar } from '../../components/Shared/Sidebar';
+import { useTranslation } from 'react-i18next';
+
+const typeBudgetMap = { 1: 'Equipement', 2: 'Fonctionnement', 3: 'Opérations Hors Budget' };
+const modeAttribuationMap = {
+  1: "Appel d'Offres Ouvert",
+  2: "Appel d'Offres Restreint",
+};
+const typeTravauxMap = { 1: 'Travaux', 2: 'Prestations', 3: 'Equipement', 4: 'Etude' };
+
+function formatDate(dateString) {
+  if (!dateString) return 'N/A';
+  return new Date(dateString).toLocaleDateString('fr-FR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function formatTime(timeString) {
+  if (!timeString) return '';
+  return new Date(timeString).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+const OperationDetails = () => {
+  const { id } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const announcementRef = useRef();
+  const { t } = useTranslation();
+
+  // Compute opId ONCE using URL param, location state, or path, to be used everywhere
+  const [opId, setOpId] = useState(() =>
+    id ||
+    location.state?.operation?.id ||
+    location.pathname.match(/(\d+)$/)?.[1] ||
+    null
+  );
+
+  const [operation, setOperation] = useState(location.state?.operation || null);
+
+  useEffect(()=>{
+    console.log('In operationDetails.jsx',operation)
+  },[])
+
+  const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+
+  const [lots, setLots] = useState([]);
+  
+  
+  const [announces, setAnnounces] = useState([]);
+  const [currentAnnounce, setCurrentAnnounce] = useState([]);
+  const [cahierDeCharges, setCahierDeCharges] = useState([]);
+
+  const refreshOperationData = async () => {
+    if (!opId) return;
+    
+    setLoading(true);
+    try {
+      const result = await fetchOperationDetails(opId);
+      
+      if (result.success) {
+        setLots(result.lots || []);
+        setAnnounces(result.announces || []);
+        setCahierDeCharges(result.cahierDeCharges || []);
+        setFetchError(null);
+      } else {
+        setFetchError(result.message);
+      }
+    } catch (err) {
+      setFetchError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  useEffect(() => {
+    if (!opId) {
+      const resolvedId =
+        id ||
+        location.state?.operation?.id ||
+        location.pathname.match(/(\d+)$/)?.[1] ||
+        null;
+      setOpId(resolvedId);
+      if (!resolvedId) {
+        setFetchError(t('operationDetails.operationNotFound'));
+        return;
+      }
+      localStorage.setItem('opId', resolvedId);
+      refreshOperationData();
+      return;
+    }
+  
+    setFetchError(null);
+    localStorage.setItem('opId', opId);
+    refreshOperationData();
+  }, [opId, id, location.pathname]);
+
+  useEffect(() => {
+    const found = announces.filter(ann => ann?.Status === 1);
+    setCurrentAnnounce(found.length > 0 ? found[0] : null);
+  }, [announces]);
+
+  // For the Add Annonce button in the header
+  const handleHeaderAddClick = () => {
+    if (announcementRef.current) {
+      announcementRef.current.openAddModal();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <p className="text-gray-400 text-xs italic">{t('loading')}</p>
+      </div>
+    );
+  }
+
+  if (fetchError || !operation) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <p className="text-red-500 text-sm font-medium">{fetchError || t('operationDetails.noData')}</p>
+        <button onClick={() => navigate(-1)} className="text-blue-600 flex items-center gap-2 text-sm">
+          <ArrowLeft size={14} /> {t('operationDetails.back')}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <Sidebar activeSection="operations" />
+      <div className="flex">
+        <div className="p-8 max-w-[1600px] mx-auto flex-1">
+          {/* header Operation Details */}
+          <div className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center mb-8">
+            <div className="flex-1 min-w-0 flex flex-col lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div
+                  className="text-slate-500 font-medium text-xs lg:text-sm whitespace-pre-line break-words max-w-[300px] leading-[1.5] tracking-[0.01em] border-l-4 border-gry-900 pl-4 bg-slate-50 mb-2"
+                  title={operation.Numero || operation.NumOperation || ""}
+                >
+                  {t('operationDetails.operationNumber')} : {operation.Numero || operation.NumOperation}
+                </div>
+                <h1 className="text-lg lg:text-xl text-gray-700 font-extrabold mb-3 tracking-tight leading-tight">
+                  {t('operationDetails.object')}{' : '}
+                  {operation.Objet || operation.Objectif || (
+                    <span className="italic text-gray-400">{t('operationDetails.noObject')}</span>
+                  )}
+                </h1>
+              </div>
+              <div className="mt-3 lg:mt-0 lg:ml-6 flex-shrink-0">
+                <button
+                  type="button"
+                  className="inline-flex items-center px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold rounded-md shadow-sm transition-colors cursor-pointer"
+                  onClick= {handleHeaderAddClick} 
+                >
+                  <span className="mr-2"><Plus size={16} /></span>
+                  {t('operationDetails.addAnnouncement')}
+                </button>
+              </div>
+            </div>        
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-6 items-start">
+            {/* LEFT SIDEBAR */}
+            <aside className="w-full lg:w-80 flex-shrink-0 space-y-4">
+              {/* Operation Card */}
+              <DetailsCard
+                leading={<div className="w-0.5 h-4 rounded-full bg-green-600" />}
+                cardTitle={`Nº : ${operation.Numero || operation.NumOperation}`}
+                statusCode={operation.StateCode}
+                onValidate={() => {/* TODO: handle validate operation */}}
+                onModify={() => {/* TODO: handle modify operation */}}
+                Icon={Hash}
+                disabled={false}
+              >
+                <div className="p-4 bg-white">
+                  <DetailRow label={t('operationDetails.object')} value={operation.Objet || operation.Objectif} />
+                  <DetailRow label={t('operationDetails.service')} value={operation.Service_Contractant || operation.ServiceDeContract} />
+                  <DetailRow label={t('operationDetails.type')} value={typeTravauxMap[operation.TypeTravauxCode]} />
+                  <DetailRow label={t('operationDetails.budget')} value={typeBudgetMap[operation.TypeBudgetCode]} />
+                  <DetailRow label={t('operationDetails.attribution')} value={modeAttribuationMap[operation.ModeAttributionCode]} />
+                  <DetailRow label={t('operationDetails.visaNumber')} value={operation.NumeroVisa || operation.VisaNumber} />
+                  <DetailRow label={t('operationDetails.visaDate')} value={formatDate(operation.VisaDate)} />
+                </div>
+              </DetailsCard>
+
+              {/* Announce Card */}
+              <DetailsCard
+                leading={<div className="w-0.5 h-4 bg-orange-500 rounded-sm"/>}
+                cardTitle={t('operationDetails.announcement')}
+                statusCode={currentAnnounce?.Status}
+                onValidate={() => alert("Validation de l'annonce non implémentée")}
+                onModify={() => {
+                  if (currentAnnounce && announcementRef.current) {
+                    announcementRef.current.openEditModal(currentAnnounce);
+                  }
+                }}
+                Icon={Megaphone}
+                disabled={operation.Status == 1 ? true : false}
+              >
+                <div className="p-4 bg-white">
+                {currentAnnounce ? (
+                    <>
+                      <DetailRow label={t('operationDetails.announcementNumber')} value={currentAnnounce.Numero} />
+                      <DetailRow label={t('operationDetails.journal')} value={currentAnnounce.Journal} />
+                      <DetailRow
+                        label={t('operationDetails.publicationDate')}
+                        value={currentAnnounce.Date_Publication ? formatDate(currentAnnounce.Date_Publication) : "N/A"}
+                      />
+                      <DetailRow
+                        label={t('operationDetails.opening')}
+                        value={
+                          (currentAnnounce.Date_Overture ? formatDate(currentAnnounce.Date_Overture) : "") +
+                          (currentAnnounce.Heure_Ouverture ? (" " + t('operationDetails.openingAt') + " " + formatTime(currentAnnounce.Heure_Ouverture)) : "")
+                        }
+                      />
+                    </>
+                  ) : (
+                    <p className="text-gray-400 text-xs italic">{t('operationDetails.noAnnouncement')}</p>
+                  )}  
+                </div>
+              </DetailsCard>
+            </aside>
+
+            {/* RIGHT CONTENT */}
+            <main className="flex-1 w-full space-y-6">
+              <AnnouncementSubSection 
+                ref={announcementRef}
+                operationID={opId}
+                Annonces={announces}
+                refreshData={refreshOperationData}
+              />
+              
+              <LotsSubSection
+                operationID={opId}
+                Lots={lots}
+                refreshData={refreshOperationData} 
+              />
+
+              <SpecificationsSection
+                operationID={opId}
+                Specifications={cahierDeCharges}
+                refreshData={refreshOperationData} 
+              />
+            </main>
+          </div>
+          {/* Button fermer */}
+          <div className="flex justify-end pt-1 px-1">
+            <button
+              className="flex items-center justify-center px-8 py-2 bg-white border border-gray-300 text-slate-700 rounded text-[10px] font-bold uppercase hover:bg-gray-100 min-w-[100px] cursor-pointer"
+              onClick={() => navigate('/admin')}
+            >
+              {t('operationDetails.close')}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default OperationDetails;
